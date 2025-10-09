@@ -4,4 +4,4 @@ python main.py \
     --num_epoch=50 \
     --learning_rate=1e-4 \
     --criterion="crossentropy" \
-    --structure="tiny"
+    --structure=""

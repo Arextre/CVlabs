@@ -10,9 +10,9 @@ from utils import CSVLoader, CSVDataset
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 buildin_model = {
-    "tiny": [4, "tanh", 8, "leakyrelu", 4, "tanh"],
-    "normal": [4, "tanh", 16, "leakyrelu", 8, "relu", 4, "tanh"],
-    "huge": [4, "tanh", 16, "tanh", 32, "relu", 20, "leakyrelu", 10, "tanh"]
+    "tiny": [4, "tanh", 6, "leakyrelu", 4, "tanh"],
+    "normal": [4, "tanh", 8, "leakyrelu", 8, "relu", 4, "tanh"],
+    "huge": [4, "tanh", 8, "tanh", 16, "relu", 20, "leakyrelu", 10, "tanh"]
 }
 
 class FCN(nn.Module):
@@ -131,6 +131,9 @@ if __name__ == "__main__":
     structure = args.structure
     if structure in buildin_model.keys():
         hidden_params = buildin_model[structure]
+    elif len(structure) == 0:
+        # empty hidden layer
+        hidden_params = []
     else:
         layer_info = structure.split(",")
         hidden_params = []
@@ -159,6 +162,7 @@ if __name__ == "__main__":
     learning_rate = args.learning_rate
 
     # start training!
+    print(f"Network Structure: {net}")
     optim = torch.optim.Adam(net.parameters(), lr=learning_rate)
     net = net.to(device)
     net.train()
