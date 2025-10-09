@@ -29,7 +29,11 @@ class CSVLoader:
         self.testData = None
         self.testLabel = None
     
-    def load_data(self):
+    def load(self):
+        """
+        Returns:
+            X_train, y_train, X_test, y_test (torch.Tensor)
+        """
         if not os.path.exists(self.csv_path):
             raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
         df = pd.read_csv(self.csv_path, sep=self.sep, header=None)
@@ -47,6 +51,8 @@ class CSVLoader:
         return X_train, y_train, X_test, y_test
     
 class CSVDataset(Dataset):
+    """Loading data from CSV files using CSVLoader and can be used with torch DataLoader.
+    """
     def __init__(self, data, labels):
         self.data = data
         self.labels = labels
@@ -60,6 +66,4 @@ class CSVDataset(Dataset):
         X = self.data[index]
         y = self.labels[index]
         return X, y
-        
-        
         
