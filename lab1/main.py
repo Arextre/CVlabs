@@ -10,9 +10,9 @@ from utils import CSVLoader, CSVDataset
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 buildin_model = {
-    "tiny": [4, "tanh", 6, "leakyrelu", 4, "tanh"],
-    "normal": [4, "tanh", 8, "leakyrelu", 8, "relu", 4, "tanh"],
-    "huge": [4, "tanh", 8, "tanh", 16, "relu", 20, "leakyrelu", 10, "tanh"]
+    "tiny": [4, "tanh", 6, "leakyrelu", 4, "sigmoid"],
+    "normal": [4, "tanh", 8, "leakyrelu", 8, "leakyrelu", 4, "sigmoid"],
+    "huge": [4, "tanh", 8, "sigmoid", 16, "leakyrelu", 20, "leakyrelu", 10, "sigmoid"]
 }
 
 class FCN(nn.Module):
@@ -98,7 +98,7 @@ def parse():
     parser = argparse.ArgumentParser(description="Train and evaluate a simple FCN with CSV data.")
     parser.add_argument("--csv_path", type=str, default="./dataset.csv")
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--num_epoch", type=int, default=10)
+    parser.add_argument("--num_epoch", type=int, default=None)
     parser.add_argument("--learning_rate", type=float, default=1e-3)
     parser.add_argument(
         "--criterion",
@@ -114,19 +114,44 @@ def parse():
     )
     return parser.parse_args()
 
+def validate(net, test_dataloader) -> float:
+    net.eval()
+    total = 0
+    correct = 0
+    with torch.no_grad():
+        for features, labels in test_dataloader:
+            features, labels = features.to(device), labels.to(device)
+            output = net(features)
+            _, predict = torch.max(output, dim=1)
+            _, labels = torch.max(labels, dim=1)
+            total += labels.shape[0]
+            correct += (predict == labels).sum().item()
+        accuracy = 100 * correct / total
+        print(f"Accuracy: {accuracy:.2f}%")
+        return accuracy
+
 if __name__ == "__main__":
     args = parse()
     # load data
-    data_reader = CSVLoader(args.csv_path, sep=",", test_ratio=0.1, device=device)
+    data_reader = CSVLoader(args.csv_path, sep=",", test_ratio=0.1)
+    def normalize(feature: torch.Tensor):
+        # used for normalize feature data
+        mean = feature.mean(dim=0, keepdim=True)
+        std = feature.std(dim=0, keepdim=True)
+        feature = (feature - mean) / std
+        return feature
     X_train, y_train, X_test, y_test = data_reader.load()
+    X_train, X_test = normalize(X_train), normalize(X_test)
     train_dataset = CSVDataset(X_train, y_train)
     test_dataset = CSVDataset(X_test, y_test)
     train_dataloader = DataLoader(train_dataset,
                                   batch_size=args.batch_size,
-                                  shuffle=True)
+                                  shuffle=True,
+                                  num_workers=4)
     test_dataloader = DataLoader(test_dataset,
-                                 batch_size=1,
-                                 shuffle=False)
+                                 batch_size=4,
+                                 shuffle=False,
+                                 num_workers=4)
     # readin the structure of hidden networks
     structure = args.structure
     if structure in buildin_model.keys():
@@ -166,40 +191,61 @@ if __name__ == "__main__":
     optim = torch.optim.Adam(net.parameters(), lr=learning_rate)
     net = net.to(device)
     net.train()
-    for epoch in range(num_epoch):
-        total_loss = 0.0
-        print("-" * 20 + f" Epoch {epoch} Start " + "-" * 20)
-        progress_bar = tqdm(
-            train_dataloader,
-            desc=f"Epoch {epoch + 1} / {num_epoch}"
-        )
-        for features, labels in progress_bar:
-            features, labels = features.to(device), labels.to(device)
+    if num_epoch is None:
+        # auto epoch training
+        best = 0
+        epoch = 0
+        while True:
+            total_loss = 0.0
+            print("-" * 20 + f" Epoch {epoch} Start " + "-" * 20)
+            progress_bar = tqdm(
+                train_dataloader,
+                desc=f"Epoch {epoch + 1} / {num_epoch}"
+            )
+            for features, labels in progress_bar:
+                features, labels = features.to(device), labels.to(device)
 
-            outputs = net.forward(features)
-            loss = criterion(outputs, labels)
+                outputs = net.forward(features)
+                loss = criterion(outputs, labels)
 
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
 
-            total_loss += loss.item()
-            progress_bar.set_postfix(loss=loss.item())
-        
-        epoch_avg_loss = total_loss / len(train_dataloader)
-        print(f"Epoch [{epoch + 1} / {num_epoch}] Average Loss: {epoch_avg_loss:.5f}")
+                total_loss += loss.item()
+                progress_bar.set_postfix(loss=loss.item())
+            epoch_avg_loss = total_loss / len(train_dataloader)
+            print(f"Epoch [{epoch + 1} / {num_epoch}] Average Loss: {epoch_avg_loss:.5f}")
+            acc = validate(net, test_dataloader)
+            if acc < best:
+                # model over-fit
+                break
+            best = acc
+            epoch += 1
+    else:
+        best = 0.0
+        for epoch in range(num_epoch):
+            total_loss = 0.0
+            print("-" * 20 + f" Epoch {epoch} Start " + "-" * 20)
+            progress_bar = tqdm(
+                train_dataloader,
+                desc=f"Epoch {epoch + 1} / {num_epoch}"
+            )
+            for features, labels in progress_bar:
+                features, labels = features.to(device), labels.to(device)
 
-    # validate
-    net.eval()
-    total = 0
-    correct = 0
-    with torch.no_grad():
-        for features, labels in test_dataloader:
-            features, labels = features.to(device), labels.to(device)
-            output = net(features)
-            _, predict = torch.max(output, dim=1)
-            _, labels = torch.max(labels, dim=1)
-            total += labels.shape[0]
-            correct += (predict == labels).sum().item()
-        accuracy = 100 * correct / total
-        print(f"Accuracy: {accuracy:.2f}%")
+                outputs = net.forward(features)
+                loss = criterion(outputs, labels)
+
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
+
+                total_loss += loss.item()
+                progress_bar.set_postfix(loss=loss.item())
+            
+            epoch_avg_loss = total_loss / len(train_dataloader)
+            print(f"Epoch [{epoch + 1} / {num_epoch}] Average Loss: {epoch_avg_loss:.5f}")
+            acc = validate(net, test_dataloader)
+            best = max(best, acc)
+        print(f"Best grades: accuracy == {best:.2f}%")

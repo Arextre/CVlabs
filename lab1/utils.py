@@ -18,13 +18,11 @@ class CSVLoader:
                  csv_path: str,
                  sep: str = ",",
                  test_ratio: float = 0.1,
-                 seed: int = 42,
-                 device="cpu"):
+                 seed: int = 42):
         self.csv_path = csv_path
         self.sep = sep
         self.test_ratio = test_ratio
         self.seed = seed
-        self.device = device
         self.trainData = None
         self.trainLabel = None
         self.testData = None
@@ -38,8 +36,7 @@ class CSVLoader:
         if not os.path.exists(self.csv_path):
             raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
         df = pd.read_csv(self.csv_path, sep=self.sep, header=None)
-        data = torch.from_numpy(df.values).to(device=self.device,
-                                              dtype=torch.float32)
+        data = torch.from_numpy(df.values).to(dtype=torch.float32)
         # shuffle the data
         indices = torch.randperm(data.shape[0])
         data = data[indices]
@@ -62,7 +59,7 @@ class CSVLoader:
 class CSVDataset(Dataset):
     """Loading data from CSV files using CSVLoader and can be used with torch DataLoader.
     """
-    def __init__(self, data, labels):
+    def __init__(self, data: torch.Tensor, labels: torch.Tensor):
         self.data = data
         self.labels = labels
         self.len = data.shape[0]

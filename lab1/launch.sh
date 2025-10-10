@@ -1,7 +1,7 @@
 python main.py \
     --csv_path="/home/mihari/codes/labs/CV/lab1/dataset.csv" \
-    --batch_size=16 \
-    --num_epoch=50 \
-    --learning_rate=1e-4 \
+    --batch_size=4 \
+    --learning_rate=5e-4 \
+    --num_epoch=70 \
     --criterion="crossentropy" \
-    --structure=""
+    --structure="huge"
