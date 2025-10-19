@@ -1,18 +1,18 @@
 import os
 import torch
 import argparse
-from tqdm import tqdm
 import torch.nn as nn
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from utils import CSVLoader, CSVDataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-buildin_model = {
-    "tiny": [4, "tanh", 6, "leakyrelu", 4, "sigmoid"],
-    "normal": [4, "tanh", 8, "leakyrelu", 8, "leakyrelu", 4, "sigmoid"],
-    "huge": [4, "tanh", 8, "sigmoid", 16, "leakyrelu", 20, "leakyrelu", 10, "sigmoid"]
+builtin_model = {
+    "tiny": [16, "relu", 8, "relu"],
+    "normal": [20, "tanh", 40, "leakyrelu", 20, "leakyrelu"],
+    "huge": [64, "tanh", 128, "sigmoid", 384, "leakyrelu", 100, "leakyrelu", 30, "sigmoid"]
 }
 
 class FCN(nn.Module):
@@ -27,7 +27,7 @@ class FCN(nn.Module):
         for p in hidden_params:
             if isinstance(p, int):
                 # FC layer
-                layers.append(nn.Linear(prev, p))
+                layers.append(nn.Linear(prev, p, bias=True))
                 prev = p
             else:
                 p = p.lower()
@@ -40,14 +40,13 @@ class FCN(nn.Module):
                 elif p == "relu":
                     layers.append(nn.ReLU())
                 elif p == "leakyrelu":
-                    layers.append(nn.LeakyReLU(0.05))
+                    layers.append(nn.LeakyReLU(0.1))
                 else:
                     raise ValueError(f"Unknown activate function type: {p}")
         if out_dim is None:
             self.out_dim = prev
         else:
-            layers.append(nn.Linear(prev, out_dim))
-            layers.append(nn.ReLU())
+            layers.append(nn.Linear(prev, out_dim, bias=True))
             self.out_dim = out_dim
         self.model = nn.Sequential(*layers).to(device=device)
 
@@ -69,8 +68,7 @@ class Embedding(nn.Module):
         self.embed_dim = embed_dim
         self.device = device
         self.model = nn.Sequential(
-            nn.Linear(in_dim, embed_dim),
-            nn.LeakyReLU(0.05)
+            nn.Linear(in_dim, embed_dim, bias=True),
         ).to(device=device)
     def forward(self, x):
         assert x.shape[1] == self.in_dim
@@ -86,12 +84,12 @@ class Network(nn.Module):
         self.device = device
         self.embedding = Embedding(in_dim, embed_dim, device=device)
         self.fcn = FCN(embed_dim, hidden_params, num_classes, device=device)
-        self.header = nn.Softmax(dim=1).to(device=device)
+        self.head = nn.Softmax(dim=1).to(device=device)
     def forward(self, x):
         assert x.shape[1] == self.in_dim
         x = self.embedding(x)
         x = self.fcn.forward(x)
-        x = self.header(x)
+        x = self.head(x)
         return x
 
 def parse():
@@ -154,8 +152,8 @@ if __name__ == "__main__":
                                  num_workers=4)
     # readin the structure of hidden networks
     structure = args.structure
-    if structure in buildin_model.keys():
-        hidden_params = buildin_model[structure]
+    if structure in builtin_model.keys():
+        hidden_params = builtin_model[structure]
     elif len(structure) == 0:
         # empty hidden layer
         hidden_params = []
@@ -170,7 +168,7 @@ if __name__ == "__main__":
     # build network
     net = Network(
         in_dim=2,
-        embed_dim=4,
+        embed_dim=8,
         hidden_params=hidden_params,
         num_classes=4,
         device=device
@@ -203,12 +201,12 @@ if __name__ == "__main__":
                 desc=f"Epoch {epoch + 1} / {num_epoch}"
             )
             for features, labels in progress_bar:
+                optim.zero_grad()
                 features, labels = features.to(device), labels.to(device)
 
                 outputs = net.forward(features)
                 loss = criterion(outputs, labels)
 
-                optim.zero_grad()
                 loss.backward()
                 optim.step()
 
