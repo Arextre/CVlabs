@@ -4,6 +4,7 @@ import argparse
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from utils import CSVLoader, CSVDataset
 
@@ -96,7 +97,7 @@ def parse():
     parser = argparse.ArgumentParser(description="Train and evaluate a simple FCN with CSV data.")
     parser.add_argument("--csv_path", type=str, default="./dataset.csv")
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--num_epoch", type=int, default=None)
+    parser.add_argument("--num_epoch", type=int, required=True)
     parser.add_argument("--learning_rate", type=float, default=1e-3)
     parser.add_argument(
         "--criterion",
@@ -109,6 +110,12 @@ def parse():
         type=str,
         default="normal",
         help="Structure of FCN, split by \',\', examples: 32,relu,32,relu"
+    )
+    parser.add_argument(
+        "--log_dir",
+        type=str,
+        default="./logs/default",
+        help="Directory to save tensorboard logs"
     )
     return parser.parse_args()
 
@@ -125,11 +132,17 @@ def validate(net, test_dataloader) -> float:
             total += labels.shape[0]
             correct += (predict == labels).sum().item()
         accuracy = 100 * correct / total
-        print(f"Accuracy: {accuracy:.2f}%")
+        # print(f"Accuracy: {accuracy:.2f}%")
         return accuracy
 
 if __name__ == "__main__":
     args = parse()
+
+    #############################################################
+    # init tensorboard writer
+    writer = SummaryWriter(log_dir=args.log_dir)
+
+    #############################################################
     # load data
     data_reader = CSVLoader(args.csv_path, sep=",", test_ratio=0.1)
     def normalize(feature: torch.Tensor):
@@ -150,6 +163,8 @@ if __name__ == "__main__":
                                  batch_size=4,
                                  shuffle=False,
                                  num_workers=4)
+
+    #############################################################
     # readin the structure of hidden networks
     structure = args.structure
     if structure in builtin_model.keys():
@@ -165,6 +180,8 @@ if __name__ == "__main__":
                 hidden_params.append(int(part))
             else:
                 hidden_params.append(part)
+    
+    #############################################################
     # build network
     net = Network(
         in_dim=2,
@@ -173,6 +190,8 @@ if __name__ == "__main__":
         num_classes=4,
         device=device
     )
+
+    #############################################################
     # other hyper-params
     num_epoch = args.num_epoch
     criterion = args.criterion
@@ -184,66 +203,47 @@ if __name__ == "__main__":
         raise ValueError(f"Unknown loss function type: {criterion}")
     learning_rate = args.learning_rate
 
+    #############################################################
     # start training!
     print(f"Network Structure: {net}")
     optim = torch.optim.Adam(net.parameters(), lr=learning_rate)
     net = net.to(device)
     net.train()
-    if num_epoch is None:
-        # auto epoch training
-        best = 0
-        epoch = 0
-        while True:
-            total_loss = 0.0
-            print("-" * 20 + f" Epoch {epoch} Start " + "-" * 20)
-            progress_bar = tqdm(
-                train_dataloader,
-                desc=f"Epoch {epoch + 1} / {num_epoch}"
-            )
-            for features, labels in progress_bar:
-                optim.zero_grad()
-                features, labels = features.to(device), labels.to(device)
+    best = 0.0
+    global_step = 0
+    for epoch in range(num_epoch):
+        total_loss = 0.0
+        print("-" * 20 + f" Epoch {epoch} Start " + "-" * 20)
+        progress_bar = tqdm(
+            train_dataloader,
+            desc=f"Epoch {epoch + 1} / {num_epoch}"
+        )
+        for ite, (features, labels) in enumerate(progress_bar, start=1):
+            features, labels = features.to(device), labels.to(device)
 
-                outputs = net.forward(features)
-                loss = criterion(outputs, labels)
+            outputs = net.forward(features)
+            loss = criterion(outputs, labels)
 
-                loss.backward()
-                optim.step()
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
 
-                total_loss += loss.item()
-                progress_bar.set_postfix(loss=loss.item())
-            epoch_avg_loss = total_loss / len(train_dataloader)
-            print(f"Epoch [{epoch + 1} / {num_epoch}] Average Loss: {epoch_avg_loss:.5f}")
+            total_loss += loss.item()
+            progress_bar.set_postfix(loss=loss.item())
+
+            net.eval()
             acc = validate(net, test_dataloader)
-            if acc < best:
-                # model over-fit
-                break
-            best = acc
-            epoch += 1
-    else:
-        best = 0.0
-        for epoch in range(num_epoch):
-            total_loss = 0.0
-            print("-" * 20 + f" Epoch {epoch} Start " + "-" * 20)
-            progress_bar = tqdm(
-                train_dataloader,
-                desc=f"Epoch {epoch + 1} / {num_epoch}"
-            )
-            for features, labels in progress_bar:
-                features, labels = features.to(device), labels.to(device)
-
-                outputs = net.forward(features)
-                loss = criterion(outputs, labels)
-
-                optim.zero_grad()
-                loss.backward()
-                optim.step()
-
-                total_loss += loss.item()
-                progress_bar.set_postfix(loss=loss.item())
+            net.train()
+            print(f"Epoch {epoch + 1}, Ite {ite}, " \
+                  f"loss = {loss.item():.2f}, acc = {acc:.2f}%")
             
-            epoch_avg_loss = total_loss / len(train_dataloader)
-            print(f"Epoch [{epoch + 1} / {num_epoch}] Average Loss: {epoch_avg_loss:.5f}")
-            acc = validate(net, test_dataloader)
-            best = max(best, acc)
-        print(f"Best grades: accuracy == {best:.2f}%")
+            writer.add_scalar("Accuracy/train", acc, global_step)
+            writer.add_scalar("Loss/train", loss.item(), global_step)
+            global_step += 1
+        
+        epoch_avg_loss = total_loss / len(train_dataloader)
+        print(f"Epoch [{epoch + 1} / {num_epoch}] Average Loss: {epoch_avg_loss:.5f}")
+        acc = validate(net, test_dataloader)
+        best = max(best, acc)
+    print(f"Best grades: accuracy == {best:.2f}%")
+    writer.close()
