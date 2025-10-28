@@ -217,10 +217,11 @@ def to_onehot(label: torch.Tensor) -> torch.Tensor:
 
 ```python
 builtin_model = {
-    "tiny": [4, "tanh", 6, "leakyrelu", 4, "sigmoid"],
-    "normal": [4, "tanh", 8, "leakyrelu", 8, "leakyrelu", 4, "sigmoid"],
-    "huge": [4, "tanh", 8, "sigmoid", 16, "leakyrelu", 20, "leakyrelu", 10, "sigmoid"]
+    "tiny": [16, "relu", 8, "relu"],
+    "normal": [20, "tanh", 40, "leakyrelu", 20, "leakyrelu"],
+    "huge": [64, "tanh", 128, "sigmoid", 384, "leakyrelu", 100, "leakyrelu", 30, "sigmoid"]
 }
 ```
 
-#h(-2em)需要注意的是，这里只是整个 Network 中的 FCN 部分，整个 Network 被我分为了 Embedding + FCN + head(Softmax to probability) 三个部分。
+当然，也可以使用自定义的网络结构，只需要在启动时传入 `--structure` 参数指定即可，这部分将会在后续的代码使用部分详细说明。
+
