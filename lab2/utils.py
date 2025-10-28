@@ -53,14 +53,13 @@ class ComposeMnistDataset(Dataset):
                 for k in range(j + 1, buc_size):
                     img1 = selected_data[i][j]
                     img2 = selected_data[i][k]
-                    img = torch.stack([img1, img2], dim=0)  # (2, 28, 28)
                     label = torch.tensor([0, 1], dtype=dtype)
 
-                    self.data.append(img)
+                    self.data.append((img1, img2))
                     self.labels.append(label)
                     label_counter_1 += 1
         
-        # print(f"Number of positive samples (label==1): {len(self.labels)}")
+        print(f"Number of positive samples (label==1): {len(self.labels)}")
         # for label == 0, use Downsampling to limit the number of negative samples
         random.seed(seed)
         for _ in range(label_counter_1):
@@ -73,11 +72,12 @@ class ComposeMnistDataset(Dataset):
 
             img1 = selected_data[label_i][idx_i]
             img2 = selected_data[label_j][idx_j]
-            img = torch.stack([img1, img2], dim=0)  # (2, 28, 28)
             label = torch.tensor([1, 0], dtype=dtype)
 
-            self.data.append(img)
+            self.data.append((img1, img2))
             self.labels.append(label)
+    
+        print(f"Total number of samples: {len(self.labels)}")
 
     def __len__(self):
         return len(self.data)

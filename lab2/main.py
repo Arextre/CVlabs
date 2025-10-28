@@ -71,10 +71,11 @@ def validate(model, dataloader, device=DEVICE) -> float:
     correct = 0
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Validation", leave=False):
-            img, label = batch
-            img, label = img.to(device), label.to(device)
-            img1 = img[:, 0, :, :].unsqueeze(1) # (B, 1, 28, 28)
-            img2 = img[:, 1, :, :].unsqueeze(1)
+
+            (img1, img2), label = batch
+            img1, img2, label = img1.to(device), img2.to(device), label.to(device)
+            img1 = img1.unsqueeze(1)  # (B, 1, 28, 28)
+            img2 = img2.unsqueeze(1)
 
             out = model(img1, img2)
             predicted = torch.argmax(out, 1)
@@ -82,7 +83,7 @@ def validate(model, dataloader, device=DEVICE) -> float:
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
-            del img, img1, img2, label, out, predicted, labels
+            del img1, img2, label, out, predicted, labels
 
         gc.collect()
         torch.cuda.empty_cache()
@@ -97,10 +98,10 @@ def train(model, optimizer, criterion, train_dataloader, test_dataloader, writer
 
         optimizer.zero_grad()
 
-        img, label = batch
-        img, label = img.to(device), label.to(device)
-        img1 = img[:, 0, :, :].unsqueeze(1) # (B, 1, 28, 28)
-        img2 = img[:, 1, :, :].unsqueeze(1)
+        (img1, img2), label = batch
+        img1, img2, label = img1.to(device), img2.to(device), label.to(device)
+        img1 = img1.unsqueeze(1)  # (B, 1, 28, 28)
+        img2 = img2.unsqueeze(1)
 
         out = model(img1, img2)
         loss = criterion(out, label)
@@ -119,7 +120,7 @@ def train(model, optimizer, criterion, train_dataloader, test_dataloader, writer
             writer.add_scalar("Train/Accuracy", acc, global_step=global_step)
             global_step += 1
 
-            del img, img1, img2, label, out, loss
+            del img1, img2, label, out, loss
             gc.collect()
             torch.cuda.empty_cache()
 
