@@ -225,9 +225,7 @@ def to_onehot(label: torch.Tensor) -> torch.Tensor:
 
 = 模型设计
 
-我设计的网络结构是十分经典的 Embedding + MLP Head 结构，接下来分为 Embedding, MLP 和 Head 三个部分对我的模型进行介绍。
-
-该模型的具体代码部分在 `main.py` 中的 `class Network` 中，可以在代码中找到具体实现。整体使用该类实现网络时，传入参数为：
+我设计的网络结构是十分经典的 Embedding + MLP Head 结构。该模型的具体代码部分在 `main.py` 中的 `class Network` 中，可以在代码中找到具体实现。整体使用该类实现网络时，传入参数为：
 
 ```py
     # build network
@@ -240,7 +238,9 @@ def to_onehot(label: torch.Tensor) -> torch.Tensor:
     )
 ```
 
-这样即可获得一个完整的前馈神经网络模型 `net`没后续只需要对 `net` 进行训练和测试即可。由于本次实验是一个分类任务，所以默认选择交叉熵损失函数 `nn.CrossEntropyLoss()` 作为损失函数，后续将在启动脚本中介绍损失函数设置。
+这样即可获得一个完整的前馈神经网络模型 `net`，后续只需要对 `net` 进行训练和测试即可。由于本次实验是一个分类任务，所以默认选择交叉熵损失函数 `nn.CrossEntropyLoss()` 作为损失函数，后续将在启动脚本中介绍损失函数设置。
+
+接下来分为 Embedding, MLP 和 Head 三个部分对模型进行介绍。
 
 == Embedding Layer
 
