@@ -79,8 +79,10 @@ class Net(nn.Module):
         self.embedding = Embedding(out_channels=embed_channels)
         self.net = SiameseNetwork(in_channels=embed_channels,
                                   hidden_channels=hidden_channels)
+        self.head = nn.Softmax(dim=-1)
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         emb_x1 = self.embedding(x1)  # (B, embed_channels, 28, 28)
         emb_x2 = self.embedding(x2)  # (B, embed_channels, 28, 28)
         out = self.net(emb_x1, emb_x2)  # (B, 2)
+        out = self.head(out)
         return out

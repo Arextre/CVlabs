@@ -52,12 +52,6 @@ def parse():
         help="Number of training epochs",
     )
     parser.add_argument(
-        "--num_workers",
-        type=int,
-        default=2,
-        help="Number of workers for data loading"
-    )
-    parser.add_argument(
         "--log_path",
         type=str,
         default="./notebook/logs",
@@ -73,7 +67,7 @@ def validate(model, dataloader, device=DEVICE) -> float:
         for batch in tqdm(dataloader, desc="Validation", leave=False):
 
             (img1, img2), label = batch
-            img1, img2, label = img1.to(device), img2.to(device), label.to(device)
+            # img1, img2, label = img1.to(device), img2.to(device), label.to(device)
             img1 = img1.unsqueeze(1)  # (B, 1, 28, 28)
             img2 = img2.unsqueeze(1)
 
@@ -99,7 +93,7 @@ def train(model, optimizer, criterion, train_dataloader, test_dataloader, writer
         optimizer.zero_grad()
 
         (img1, img2), label = batch
-        img1, img2, label = img1.to(device), img2.to(device), label.to(device)
+        # img1, img2, label = img1.to(device), img2.to(device), label.to(device)
         img1 = img1.unsqueeze(1)  # (B, 1, 28, 28)
         img2 = img2.unsqueeze(1)
 
@@ -142,19 +136,20 @@ if __name__ == "__main__":
 
     train_dataset = ComposeMnistDataset(scale=args.select_scale,
                                         is_train=True,
-                                        dtype=DTYPE)
+                                        dtype=DTYPE,
+                                        device=DEVICE)
     train_dataloader = DataLoader(train_dataset,
                                   batch_size=args.batch_size,
-                                  shuffle=True,
-                                  num_workers=args.num_workers)
+                                  shuffle=True)
 
     test_dataset = ComposeMnistDataset(scale=args.select_scale,
                                        is_train=False,
-                                       dtype=DTYPE)
+                                       dtype=DTYPE,
+                                       device=DEVICE)
+    test_dataset = test_dataset.to(device=DEVICE)
     test_dataloader = DataLoader(test_dataset,
                                  batch_size=args.batch_size,
-                                 shuffle=False,
-                                 num_workers=args.num_workers)
+                                 shuffle=False)
 
     model = Net(embed_channels=args.embed_channels,
                 hidden_channels=args.hidden_channels)

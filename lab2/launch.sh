@@ -11,5 +11,4 @@ python main.py \
     --learning_rate=1e-3 \
     --batch_size=1024 \
     --num_epoch=1 \
-    --num_workers=4 \
     --log_path=$LOG_DIR

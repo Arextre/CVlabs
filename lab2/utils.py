@@ -11,8 +11,9 @@ class ComposeMnistDataset(Dataset):
             scale: float=0.1,
             is_train: bool=True,
             dtype: torch.dtype=torch.float32,
+            device: torch.device=torch.device('cpu'),
             path: str='./notebook/data',
-            seed: int=13
+            seed: int=13,
         ):
         """Compose MNIST dataset from training sets
         Args:
@@ -28,9 +29,9 @@ class ComposeMnistDataset(Dataset):
                                        train=is_train,
                                        download=True,
                                        transform=transform)
-        mnist_data = mnist_dataset.data.to(dtype=dtype)
-        mnist_labels = mnist_dataset.targets.to(dtype=dtype)
-        
+        mnist_data = mnist_dataset.data.to(device=device, dtype=dtype)
+        mnist_labels = mnist_dataset.targets.to(device=device, dtype=dtype)
+
         buc = [[] for _ in range(10)]   # 10 buckets for 10 classes
         for i in range(mnist_data.shape[0]):
             label = int(mnist_labels[i].item())
@@ -53,7 +54,7 @@ class ComposeMnistDataset(Dataset):
                 for k in range(j + 1, buc_size):
                     img1 = selected_data[i][j]
                     img2 = selected_data[i][k]
-                    label = torch.tensor([0, 1], dtype=dtype)
+                    label = torch.tensor([0, 1], device=device, dtype=dtype)
 
                     self.data.append((img1, img2))
                     self.labels.append(label)
@@ -72,7 +73,7 @@ class ComposeMnistDataset(Dataset):
 
             img1 = selected_data[label_i][idx_i]
             img2 = selected_data[label_j][idx_j]
-            label = torch.tensor([1, 0], dtype=dtype)
+            label = torch.tensor([1, 0], device=device, dtype=dtype)
 
             self.data.append((img1, img2))
             self.labels.append(label)
@@ -85,6 +86,16 @@ class ComposeMnistDataset(Dataset):
         assert idx < len(self.data)
         return self.data[idx], self.labels[idx]
                 
-            
-        
+    def to(self, device: torch.device):
+        """Move dataset to specified device
+
+        Warning:
+            This operation is slow and may consume a lot of memory.
+        """
+        for i in range(len(self.data)):
+            img1, img2 = self.data[i]
+            self.data[i] = (img1.to(device), img2.to(device))
+        for i in range(len(self.labels)):
+            self.labels[i] = self.labels[i].to(device)
+        return self
         
