@@ -83,7 +83,15 @@ def validate(model, dataloader, device=DEVICE) -> float:
         torch.cuda.empty_cache()
     return correct / total if total > 0 else 0
 
-def train(model, optimizer, criterion, train_dataloader, test_dataloader, writer=None, device=DEVICE):
+def train(
+        model,
+        optimizer,
+        criterion,
+        train_dataloader,
+        test_dataloader,
+        writer=None,
+        device=DEVICE
+):
     model.train()
     epoch_loss = 0.0
     global_step = 0
@@ -137,7 +145,7 @@ if __name__ == "__main__":
     print(f"Log path: {args.log_path}")
     print(f"Arguments: {args}")
 
-    writer = SummaryWriter(log_dir=args.log_path)
+    # writer = SummaryWriter(log_dir=args.log_path)
 
     train_dataset = ComposeMnistDataset(scale=args.select_scale,
                                         is_train=True,
@@ -170,28 +178,4 @@ if __name__ == "__main__":
 
     for epoch in range(args.num_epoch):
         print(f"Epoch {epoch + 1} / {args.num_epoch}")
-        train(model, optimizer, criterion, train_dataloader, test_dataloader, writer)
-        # accuracy = validate(model, test_dataloader)
-        # print(f"Validation Accuracy: {accuracy * 100:.2f}%")
-    
-    # --- Example: prune by activations using forward_hook (uncomment to run) ---
-    # from_this = prune_model_with_hook(model, test_dataloader, num_prune=5, device=DEVICE)
-    # acc_after = validate(model, test_dataloader, device=DEVICE)
-    # print(f"Accuracy after pruning 5 channels: {acc_after * 100:.2f}%")
-
-    # --- Example: collect and plot mean feature maps of last_conv (before pruning) ---
-    # mean_maps = collect_last_conv_mean_feature_maps(model, test_dataloader, device=DEVICE)
-    # plot_feature_maps_grid(
-    #     mean_maps,
-    #     save_path=os.path.join(args.log_path, 'mean_feature_maps.png'),
-    #     title='Last Conv Mean Feature Maps (test set)'
-    # )
-
-    # --- Example: sweep K and plot Accuracy vs K ---
-    # results = prune_k_sweep_and_eval(model, test_dataloader, device=DEVICE)
-    # plot_prune_curve(
-    #     results,
-    #     save_path=os.path.join(args.log_path, 'prune_curve.png'),
-    #     title='Accuracy vs Pruned Channels K'
-    # )
-    writer.close()
+        train(model, optimizer, criterion, train_dataloader, test_dataloader)
