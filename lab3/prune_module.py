@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -118,14 +119,32 @@ def plot_feature_map_grid(
 ):
     assert (feature_map.ndim == 3,
             "Expected feature_map to have 3 dimensions (C,H,W).")
-    c, h, w = feature_map.shape
-    rows, cols = _auto_grid(c)
-
+    channel, h, w = feature_map.shape
+    rows, cols = _auto_grid(channel)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
+    axes = np.array(axes).reshape(rows, cols)
+    vmin = feature_map.min().item()
+    vmax = feature_map.max().item()
+    for idx in range(rows * cols):
+        r, c = divmod(idx, cols)
+        ax = axes[r, c]
+        ax.set_axis_off()
+        if idx < channel:
+            img = feature_map[idx].numpy()
+            ax.imshow(img, cmap='gray', vmin=vmin, vmax=vmax)
+            ax.set_title(f"Channel_{idx}", fontsize=8)
+    fig.suptitle("Channel-wise Mean Feature Maps")
+    fig.tight_layout()
+    os.makedirs(path, exist_ok=True)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+        
 
 def prune_model(
         model: Net,
         dataloader: torch.utils.data.DataLoader,
         num_prune: int,
+        feature_map_path: str | None = None,
         device: torch.device=DEVICE
 ):
     feature_map = collect_channel_activate_means(
@@ -134,7 +153,8 @@ def prune_model(
         device,
         collect_type="batch_means",
     )
-    plot_feature_map_grid(feature_map)
+    if feature_map_path is not None:
+        plot_feature_map_grid(feature_map)
 
     results = _prune_model(model, dataloader, num_prune, device)
     return results

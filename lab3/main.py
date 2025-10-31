@@ -1,3 +1,4 @@
+import os
 import gc
 import argparse
 from tqdm import tqdm
@@ -8,6 +9,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from models import Net
+from prune_module import prune_model
 from utils import ComposeMnistDataset
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -56,6 +58,12 @@ def parse():
         type=str,
         default="./notebook/logs",
         help="Path to save logs"
+    )
+    parser.add_argument(
+        "--num_prune",
+        type=int,
+        default=4,
+        help="Number of channels to prune"
     )
     return parser.parse_args()
 
@@ -128,15 +136,11 @@ def train(
 
     acc = validate(model, test_dataloader, device)
     avg_loss = epoch_loss / len(train_dataloader)
-    print(f"----- Training finished, Epoch Loss: {avg_loss:.4f}, Accuracy: {acc * 100:.2f}% -----")
+    print(f"----- Training finished, Epoch Loss: {avg_loss:.4f}, "
+          f"Accuracy: {acc * 100:.2f}% -----")
     
     if writer is not None:
         writer.add_scalar("Train/Accuracy", acc, global_step=global_step)
-
-def prune_model(model: Net, num_prune, activations):
-    last_resblock = model.net.feature_extractor[-4]
-    last_conv = last_resblock.model[-2]
-
 
 if __name__ == "__main__":
     args = parse()
@@ -179,3 +183,20 @@ if __name__ == "__main__":
     for epoch in range(args.num_epoch):
         print(f"Epoch {epoch + 1} / {args.num_epoch}")
         train(model, optimizer, criterion, train_dataloader, test_dataloader)
+        
+    fin_acc = validate(model, test_dataloader, DEVICE)
+    
+    results = [fin_acc]
+    prune_results = prune_model(
+        model,
+        test_dataloader,
+        num_prune=args.num_prune,
+        feature_map_path=os.path.join(args.log_path, "feature_map.png"),
+        device=DEVICE
+    )
+    results.extend(prune_results)
+    
+    writer = SummaryWriter(log_dir=os.path.join(args.log_path, "prune_logs"))
+    for i, acc in enumerate(results):
+        writer.add_scalar("Prune/Accuracy", acc, global_step=i)
+    writer.close()

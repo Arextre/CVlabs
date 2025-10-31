@@ -199,7 +199,7 @@ def plot_feature_maps_grid(mean_maps: torch.Tensor, save_path: str | None = None
         ax.axis('off')
         if idx < C:
             img = mean_maps[idx].numpy()
-            ax.imshow(img, cmap='viridis', vmin=vmin, vmax=vmax)
+            ax.imshow(img, cmap='gray', vmin=vmin, vmax=vmax)
             ax.set_title(f"c{idx}", fontsize=8)
     fig.suptitle(title)
     fig.tight_layout()
