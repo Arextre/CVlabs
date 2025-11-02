@@ -1,20 +1,22 @@
 import gc
-import torch
 import random
 import numpy as np
+from tqdm import tqdm
+
+import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Dataset
 
 class ComposeMnistDataset(Dataset):
     def __init__(
-            self,
-            scale: float=0.1,
-            is_train: bool=True,
-            dtype: torch.dtype=torch.float32,
-            device: torch.device=torch.device('cpu'),
-            path: str='./notebook/data',
-            seed: int=13,
-        ):
+        self,
+        scale: float=0.1,
+        is_train: bool=True,
+        dtype: torch.dtype=torch.float32,
+        device: torch.device=torch.device('cpu'),
+        path: str='./notebook/data',
+        seed: int=13,
+    ):
         """Compose MNIST dataset from training sets
         Args:
             scale (float): select scale of training data from MNIST
@@ -98,4 +100,89 @@ class ComposeMnistDataset(Dataset):
         for i in range(len(self.labels)):
             self.labels[i] = self.labels[i].to(device)
         return self
-        
+
+
+
+
+def validate(
+    model,
+    dataloader,
+    device: torch.device | None = None
+) -> float:
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval()
+    total = 0
+    correct = 0
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Validation", leave=False):
+
+            (img1, img2), label = batch
+            img1, img2, label = img1.to(device), img2.to(device), label.to(device)
+            img1 = img1.unsqueeze(1)  # (B, 1, 28, 28)
+            img2 = img2.unsqueeze(1)
+
+            out = model(img1, img2)
+            predicted = torch.argmax(out, 1)
+            labels = torch.argmax(label, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+            del img1, img2, label, out, predicted, labels
+
+        gc.collect()
+        torch.cuda.empty_cache()
+    return correct / total if total > 0 else 0
+
+def train(
+    model,
+    optimizer,
+    criterion,
+    train_dataloader,
+    test_dataloader,
+    writer=None,
+    device: torch.device | None = None,
+):
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.train()
+    epoch_loss = 0.0
+    global_step = 0
+    progress_bar = tqdm(train_dataloader, desc="Training", leave=False)
+    for idx, batch in enumerate(progress_bar, start=1):
+
+        optimizer.zero_grad()
+
+        (img1, img2), label = batch
+        img1, img2, label = img1.to(device), img2.to(device), label.to(device)
+        img1 = img1.unsqueeze(1)  # (B, 1, 28, 28)
+        img2 = img2.unsqueeze(1)
+
+        out = model(img1, img2)
+        loss = criterion(out, label)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+        progress_bar.set_postfix({"loss": loss.item()})
+
+        if idx % 10 == 0 and writer is not None:
+
+            acc = validate(model, test_dataloader, device)
+            model.train()
+            writer.add_scalar("Train/Loss", loss.item(), global_step=global_step)
+            writer.add_scalar("Train/Accuracy", acc, global_step=global_step)
+            global_step += 1
+
+            del img1, img2, label, out, loss
+            gc.collect()
+            torch.cuda.empty_cache()
+
+    acc = validate(model, test_dataloader, device)
+    avg_loss = epoch_loss / len(train_dataloader)
+    print(f"----- Training finished, Epoch Loss: {avg_loss:.4f}, "
+          f"Accuracy: {acc * 100:.2f}% -----")
+    
+    if writer is not None:
+        writer.add_scalar("Train/Accuracy", acc, global_step=global_step)

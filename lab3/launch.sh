@@ -11,4 +11,5 @@ python main.py \
     --learning_rate=1e-3 \
     --batch_size=1024 \
     --num_epoch=1 \
-    --log_path=$LOG_DIR
+    --log_path=$LOG_DIR \
+    --num_prune=30

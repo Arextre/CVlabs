@@ -1,14 +1,13 @@
 import os
 import math
 import numpy as np
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
-from tqdm import tqdm
 
 from models import Net
-from main import validate, DEVICE
 
 def _get_last_conv(model: Net):
     last_resblock = model.net.feature_extractor[-4]
@@ -20,10 +19,10 @@ def _get_last_conv(model: Net):
 
 @torch.no_grad()
 def collect_channel_activate_means(
-        model: Net,
-        dataloader,
-        collect_type: str="pixel_means",
-        device: torch.device=DEVICE
+    model: Net,
+    dataloader,
+    device: torch.device | None = None,
+    collect_type: str = "pixel_means",
 ) -> torch.Tensor:
     
     model.eval()
@@ -38,7 +37,7 @@ def collect_channel_activate_means(
     if collect_type == "pixel_means":
         sum_dim = (0, 2, 3)
     elif collect_type == "batch_means":
-        sum_dim = (0)
+        sum_dim = (0,)
     else:
         raise ValueError(f"Unknown collect_type: {collect_type}")
     
@@ -57,6 +56,9 @@ def collect_channel_activate_means(
     handle = last_conv.register_forward_hook(hook_fn)
     for batch in tqdm(dataloader, desc="Collecting activations", leave=False):
         (img1, img2), _ = batch
+        # resolve device lazily to avoid circular import dependency on main
+        if device is None:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         img1, img2 = img1.to(device), img2.to(device)
         img1 = img1.unsqueeze(1)  # add channel dim
         img2 = img2.unsqueeze(1)
@@ -71,12 +73,13 @@ def collect_channel_activate_means(
 
 @torch.no_grad()
 def _prune_model(
-        model: Net,
-        dataloader: torch.utils.data.DataLoader,
-        num_prune: int,
-        device: torch.device=DEVICE
+    model: Net,
+    dataloader: torch.utils.data.DataLoader,
+    num_prune: int,
+    device: torch.device | None = None
 ):
-    channel_means = collect_channel_activate_means(model, dataloader, device)
+    # collect activations (device resolved inside)
+    channel_means = collect_channel_activate_means(model, dataloader, device=device)
     if channel_means.numel() == 0:
         print("No activations collected; skipping pruning.")
         return []
@@ -97,7 +100,11 @@ def _prune_model(
                 last_bn.weight.data[idx] = 0
             if hasattr(last_bn, "bias") and last_bn.bias is not None:
                 last_bn.bias.data[idx] = 0
-        
+
+            # delay import of validate to runtime to avoid circular import
+            from main import validate
+            if device is None:
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             acc = validate(model, dataloader, device)
             results.append(acc)
             print(f"Pruned channels: {prune_idx}")
@@ -114,11 +121,10 @@ def _auto_grid(n: int) -> tuple[int, int]:
     return rows, cols
 
 def plot_feature_map_grid(
-        feature_map: torch.Tensor,
-        path: str="./notebook/feature_maps.png"
+    feature_map: torch.Tensor,
+    path: str="./notebook/feature_maps.png"
 ):
-    assert (feature_map.ndim == 3,
-            "Expected feature_map to have 3 dimensions (C,H,W).")
+    assert feature_map.ndim == 3, "Expected feature_map to have 3 dimensions (C,H,W)."
     channel, h, w = feature_map.shape
     rows, cols = _auto_grid(channel)
     fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
@@ -135,7 +141,9 @@ def plot_feature_map_grid(
             ax.set_title(f"Channel_{idx}", fontsize=8)
     fig.suptitle("Channel-wise Mean Feature Maps")
     fig.tight_layout()
-    os.makedirs(path, exist_ok=True)
+    dirpath = os.path.dirname(path)
+    if dirpath:
+        os.makedirs(dirpath, exist_ok=True)
     fig.savefig(path, dpi=150)
     plt.close(fig)
         
@@ -145,7 +153,7 @@ def prune_model(
         dataloader: torch.utils.data.DataLoader,
         num_prune: int,
         feature_map_path: str | None = None,
-        device: torch.device=DEVICE
+        device: torch.device | None = None,
 ):
     feature_map = collect_channel_activate_means(
         model,
